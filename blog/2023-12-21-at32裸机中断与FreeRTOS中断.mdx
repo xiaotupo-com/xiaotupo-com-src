@@ -1,0 +1,304 @@
+---
+slug: at32-exint-note
+title: AT32 中断例子，包括裸机和FreeRTOS
+authors: [xiaotupo]
+tags: [AT32,中断,FreeRTOS]
+---
+
+雅特力官方提供了`EXINT`相关的`API`函数，我们通过这些函数来操作中断相关功能。
+
+在我们的项目中添加 `at32f413_exint.c` 文件，该文件就是雅特力提供的`EXINT`相关`API`。
+<!-- truncate -->
+- void exint_reset(void);
+- void exint_default_para_init(exint_init_type *exint_struct);
+- void exint_init(exint_init_type *exint_struct);
+
+
+## exint_reset(void) 中断复位函数
+
+```c
+/**
+  * @brief  exint reset
+  * @param  none
+  * @retval none
+  */
+void exint_reset(void)
+{
+  EXINT->inten = 0x00000000;
+  EXINT->polcfg1 = 0x00000000;
+  EXINT->polcfg2 = 0x00000000;
+  EXINT->evten = 0x00000000;
+  EXINT->intsts = 0x0007FFFF;
+}
+```
+
+## EXINT 默认参数配置
+
+`void exint_default_para_init(exint_init_type *exint_struct);`函数可以禁用全部`EXINT_LINE`，完成默认
+参数初始化配置。
+
+```c
+/**
+  * @brief  exint default para init
+  * @param  exint_struct
+  *         - to the structure of exint_init_type
+  * @retval none
+  */
+void exint_default_para_init(exint_init_type *exint_struct)
+{
+  exint_struct->line_enable = FALSE;
+  exint_struct->line_select = EXINT_LINE_NONE;
+  exint_struct->line_polarity = EXINT_TRIGGER_FALLING_EDGE;
+  exint_struct->line_mode = EXINT_LINE_EVENT;
+}
+```
+
+## EXINT 初始化
+
+`void exint_init(exint_init_type *exint_struct);`函数可以完成`exint_struct`结构体的参数初始化配置，包
+括事件/中断使能，`EXINT_LINE_x`选择，极性配置（上升沿/下降沿/双边沿触发），调用该函数前需
+要先初始化`exint_struct`结构体成员。
+
+```c
+/**
+  * @brief  exint init
+  * @param  exint_struct
+  *         - to the structure of exint_init_type
+  * @retval none
+  */
+void exint_init(exint_init_type *exint_struct)
+{
+  uint32_t line_index = 0;
+  line_index = exint_struct->line_select;
+
+  EXINT->inten &= ~line_index;
+  EXINT->evten &= ~line_index;
+
+  if(exint_struct->line_enable != FALSE)
+  {
+    if(exint_struct->line_mode == EXINT_LINE_INTERRUPUT)
+    {
+      EXINT->inten |= line_index;
+    }
+    else
+    {
+      EXINT->evten |= line_index;
+    }
+
+    EXINT->polcfg1 &= ~line_index;
+    EXINT->polcfg2 &= ~line_index;
+    if(exint_struct->line_polarity == EXINT_TRIGGER_RISING_EDGE)
+    {
+      EXINT->polcfg1 |= line_index;
+    }
+    else if(exint_struct->line_polarity == EXINT_TRIGGER_FALLING_EDGE)
+    {
+      EXINT->polcfg2 |= line_index;
+    }
+    else
+    {
+      EXINT->polcfg1 |= line_index;
+      EXINT->polcfg2 |= line_index;
+    }
+  }
+}
+```
+
+## EXINT 标志位清除
+
+`void exint_flag_clear(uint32_t exint_line);`函数可以清除指定`EXINT_LINE_x`的中断标志位。
+
+```c
+void exint_flag_clear(uint32_t exint_line)
+{
+EXINT->intsts = exint_line;
+}
+```
+
+## EXINT 标志位获取
+
+`flag_status exint_flag_get(uint32_t exint_line); `函数可以获取指定`EXINT_LINE_x`的中断标志位。
+
+```c
+flag_status exint_flag_get(uint32_t exint_line)
+{
+	flag_status status = RESET;
+	uint32_t exint_flag =0;
+	exint_flag = EXINT->intsts & exint_line;
+	if ((exint_flag != (uint16_t)RESET))
+	{
+		status = SET;
+	}
+	else
+	{
+		status = RESET;
+	}
+	return status;
+}
+```
+
+## EXINT 中断使能
+
+`void exint_interrupt_enable(uint32_t exint_line, confirm_state new_state);`函数可以使能/禁用指定`EXINT_LINE_x`中断。
+
+```c
+void exint_interrupt_enable(uint32_t exint_line, confirm_state new_state)
+{
+	if(new_state == TRUE)
+	{
+	    EXINT->inten |= exint_line;
+	}
+	else
+	{
+	    EXINT->inten &= ~exint_line;
+	}
+}
+```
+
+## NVIC 中断分组表
+
+|中断优先级分组|分配结果|抢占优先级取值|响应优先级取值|
+|------------|-----|------------|------------|
+|0|0位抢占优先级，4位响应优先级|0~0|0~15|
+|1|1位抢占优先级，3位响应优先级|0~1|0~7|
+|2|2位抢占优先级，2位响应优先级|0~3|0~3|
+|3|3位抢占优先级，1位响应优先级|0~7|0~1|
+|4|4位抢占优先级，0位响应优先级|0~15|0~0|
+
+
+
+
+## 裸机中断例子
+
+雅特力官方提供的中断使用例子：
+
+[AN0104 应用笔记AT32外部中断/事件EXINT使用指南](https://www.arterychip.com/download/APNOTE/AN0104_AT32_MCU_EXINT_Application_Note_ZH_V2.0.0.pdf)
+
+实验代码如下：
+`main.c`
+
+```c
+/**
+  **************************************************************************
+  * @file     main.c
+  * @brief    main program
+  **************************************************************************
+  *
+  **************************************************************************
+  */
+#include "at32f413_clock.h"
+#include "at32f413_exint.h"
+
+
+uint8_t led_flag = 0x01;
+uint32_t led_count = 0;
+uint8_t blink_flag = 0x01;
+
+/** @brief gpio config
+  *	@biref 该例子用到了两个IO口，分别是接到 PA0 的LED和接到 PA8 的按键，
+  * @brief 按键直接接地，所以需要配置按键 IO 为推挽内部上拉
+  */
+void gpio_config(void)
+{
+    /* 定义 GPIO 初始化结构体 */
+    gpio_init_type gpio_init_struct;
+
+    /* 使能 GPIOA 外设时钟 */
+    crm_periph_clock_enable(CRM_GPIOA_PERIPH_CLOCK, TRUE);
+
+    /* 设置默认参数 */
+    gpio_default_para_init(&gpio_init_struct);
+
+    /* 配置 GPIO 参数 */
+    gpio_init_struct.gpio_drive_strength = GPIO_DRIVE_STRENGTH_STRONGER; /* 较大电流推动/吸入能力 */
+    gpio_init_struct.gpio_out_type = GPIO_OUTPUT_PUSH_PULL; /* 推挽输出 */
+    gpio_init_struct.gpio_mode = GPIO_MODE_OUTPUT;
+    gpio_init_struct.gpio_pins = GPIO_PINS_0;
+    gpio_init_struct.gpio_pull = GPIO_PULL_NONE;
+    gpio_init(GPIOA, &gpio_init_struct);
+
+    /* 中断 IO 配置 */
+    gpio_init_struct.gpio_mode = GPIO_MODE_INPUT;
+    gpio_init_struct.gpio_pins = GPIO_PINS_8;
+    gpio_init_struct.gpio_pull = GPIO_PULL_UP;
+    gpio_init(GPIOA, &gpio_init_struct);
+}
+
+/**
+ * @brief 中断配置
+ * 
+ */
+void exint_line_config(void)
+{
+    exint_init_type exint_init_struct;
+    crm_periph_clock_enable(CRM_GPIOA_PERIPH_CLOCK, TRUE); /* 使能 GPIOA外设时钟 */
+    gpio_exint_line_config(GPIO_PORT_SOURCE_GPIOA, GPIO_PINS_SOURCE8);
+    exint_default_para_init(&exint_init_struct);
+    exint_init_struct.line_enable = TRUE; /* 使能中断线 */
+    exint_init_struct.line_mode = EXINT_LINE_INTERRUPUT; /* 中断模式（另外还有事件模式）*/
+    exint_init_struct.line_select = EXINT_LINE_8;
+    exint_init_struct.line_polarity = EXINT_TRIGGER_FALLING_EDGE; /* 我们在此例子中需要配置为下降沿触发模式 */
+    exint_init(&exint_init_struct);
+    /* 将中断优先级分组设置为GROUP4（16 组抢占优先级（0-15），1 组子优先级） */
+    nvic_priority_group_config(NVIC_PRIORITY_GROUP_4);
+    /* 使能 EXINT8，将其优先级分组设定为抢占优先级1，子优先级0 */
+    nvic_irq_enable(EXINT9_5_IRQn, 1, 0);
+}
+
+/**
+  * @brief  main function.
+  * @param  none
+  * @retval none
+  */
+int main(void)
+{
+    system_clock_config();
+    SysTick_Config(SystemCoreClock / 1000);
+    gpio_config();
+    exint_line_config();
+
+    while (1)
+    {
+        gpio_bits_write(GPIOA, GPIO_PINS_0, (confirm_state)led_flag);
+        if (led_count > 500 && blink_flag == 0x01)
+        {
+            led_count = 0;
+            led_flag ^= 0x01;
+
+        }
+    }
+}
+
+void EXINT9_5_IRQHandler(void)
+{
+    if (exint_flag_get(EXINT_LINE_8) != RESET)
+    {
+        blink_flag ^= 0x01;
+        exint_flag_clear(EXINT_LINE_8);
+    }
+}
+
+```
+
+`at32f413_int.c`
+
+```c
+#include "at32f413_int.h"
+
+extern uint32_t led_count;
+
+
+/**
+  * @brief  this function handles systick handler.
+  * @param  none
+  * @retval none
+  */
+void SysTick_Handler(void)
+{
+	led_count++;
+}
+
+
+```
+
+

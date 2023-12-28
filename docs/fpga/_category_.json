@@ -1,0 +1,8 @@
+{
+  "label": "FPGA",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "这里汇集了我学习 FPGA 的一些总结,在此做个笔记"
+  }
+}
